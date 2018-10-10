@@ -1,0 +1,778 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workflows_Stateful_01_name": {
+            "defaultValue": "Stateful_01",
+            "type": "String"
+        },
+        "workflows_Stateful_02_name": {
+            "defaultValue": "Stateful_02",
+            "type": "String"
+        },
+        "connections_azuretables_name": {
+            "defaultValue": "azuretables",
+            "type": "String"
+        },
+        "workflows_Stateful_01_Subscribe_name": {
+            "defaultValue": "Stateful_01_Subscribe",
+            "type": "String"
+        },
+        "workflows_Stateful_01_Unsubscribe_name": {
+            "defaultValue": "Stateful_01_Unsubscribe",
+            "type": "String"
+        },
+        "workflows_Stateful_01_UpdateStatus_name": {
+            "defaultValue": "Stateful_01_UpdateStatus",
+            "type": "String"
+        },
+        "storage_account_name": {
+            "defaultValue": "storage_account_name",
+            "type": "String"
+        },        
+        "storage_access_key": {
+            "defaultValue": "storage_access_key",
+            "type": "String"
+        }        
+    },
+    "variables": {
+        "connections_azuretables_api": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/',resourceGroup().location,'/managedApis/', parameters('connections_azuretables_name'))]"
+    },
+    "resources": [
+        {
+            "comments": "Generalized from resource: '/subscriptions/5dd549af-d55f-4c2c-ba14-8bd7699a59b3/resourceGroups/stateful/providers/Microsoft.Logic/workflows/Stateful_01'.",
+            "type": "Microsoft.Logic/workflows",
+            "name": "[parameters('workflows_Stateful_01_name')]",
+            "apiVersion": "2017-07-01",
+            "location": "[resourceGroup().location]",
+            "tags": {},
+            "scale": null,
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "manual": {
+                            "type": "Request",
+                            "kind": "Http",
+                            "inputs": {
+                                "method": "POST",
+                                "schema": {
+                                    "properties": {
+                                        "customer": {
+                                            "type": "string"
+                                        },
+                                        "datetime": {
+                                            "type": "string"
+                                        },
+                                        "items": {
+                                            "items": {
+                                                "properties": {
+                                                    "description": {
+                                                        "type": "string"
+                                                    },
+                                                    "qty": {
+                                                        "type": "integer"
+                                                    },
+                                                    "sku": {
+                                                        "type": "string"
+                                                    },
+                                                    "unitprice": {
+                                                        "type": "number"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "sku",
+                                                    "description",
+                                                    "qty",
+                                                    "unitprice"
+                                                ],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "orderid": {
+                                            "type": "string"
+                                        },
+                                        "total": {
+                                            "type": "number"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Initialize_order_status_to_New": {
+                            "runAfter": {},
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "OrderLastStatus",
+                                        "type": "String",
+                                        "value": "New"
+                                    }
+                                ]
+                            }
+                        },
+                        "Persist_new_order": {
+                            "runAfter": {
+                                "Initialize_order_status_to_New": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "body": {
+                                    "Order": "@string(triggerBody())",
+                                    "OrderState": "New",
+                                    "PartitionKey": "orders",
+                                    "RowKey": "@{triggerBody()?['orderid']}"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuretables']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/Tables/@{encodeURIComponent('state')}/entities"
+                            }
+                        },
+                        "Until": {
+                            "actions": {
+                                "Update_order_last_status": {
+                                    "runAfter": {
+                                        "Validate_new_status": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                        "name": "OrderLastStatus",
+                                        "value": "@{string(body('Wait_for_order_status_change_HTTP_Webhook')?['newState'])}"
+                                    }
+                                },
+                                "Validate_new_status": {
+                                    "runAfter": {
+                                        "Wait_for_order_status_change_HTTP_Webhook": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "cases": {
+                                        "Order_Finished": {
+                                            "case": "Finished",
+                                            "actions": {
+                                                "Update_order_status_-_Finished": {
+                                                    "runAfter": {},
+                                                    "type": "ApiConnection",
+                                                    "inputs": {
+                                                        "body": {
+                                                            "Order": "@string(triggerBody())",
+                                                            "OrderState": "Finished"
+                                                        },
+                                                        "headers": {
+                                                            "If-Match": "*"
+                                                        },
+                                                        "host": {
+                                                            "connection": {
+                                                                "name": "@parameters('$connections')['azuretables']['connectionId']"
+                                                            }
+                                                        },
+                                                        "method": "put",
+                                                        "path": "/Tables/@{encodeURIComponent('state')}/entities/etag(PartitionKey='@{encodeURIComponent('orders')}',RowKey='@{encodeURIComponent(triggerBody()?['orderid'])}')"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "Order_Shipped": {
+                                            "case": "Shipped",
+                                            "actions": {
+                                                "Update_order_status_-_Shipped": {
+                                                    "runAfter": {},
+                                                    "type": "ApiConnection",
+                                                    "inputs": {
+                                                        "body": {
+                                                            "Order": "@string(triggerBody())",
+                                                            "OrderState": "Shipped"
+                                                        },
+                                                        "headers": {
+                                                            "If-Match": "*"
+                                                        },
+                                                        "host": {
+                                                            "connection": {
+                                                                "name": "@parameters('$connections')['azuretables']['connectionId']"
+                                                            }
+                                                        },
+                                                        "method": "put",
+                                                        "path": "/Tables/@{encodeURIComponent('state')}/entities/etag(PartitionKey='@{encodeURIComponent('orders')}',RowKey='@{encodeURIComponent(triggerBody()?['orderid'])}')"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "default": {
+                                        "actions": {}
+                                    },
+                                    "expression": "@string(body('Wait_for_order_status_change_HTTP_Webhook')?['newState'])",
+                                    "type": "Switch"
+                                },
+                                "Wait_for_order_status_change_HTTP_Webhook": {
+                                    "runAfter": {},
+                                    "type": "HttpWebhook",
+                                    "inputs": {
+                                        "subscribe": {
+                                            "body": {
+                                                "callbackurl": "@{listCallbackUrl()}",
+                                                "orderid": "@{triggerBody()?['orderid']}",
+                                                "state": "@{variables('OrderLastStatus')}"
+                                            },
+                                            "method": "POST",
+                                            "uri": "https://prod-19.eastus2.logic.azure.com:443/workflows/ade3eda9f2d0431f9ca96727cd75c288/triggers/manual/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=32UY73i-GszVH3H3qtMMcsiwhk3fgm5ZPBf6xExSbDU"
+                                        },
+                                        "unsubscribe": {
+                                            "body": {
+                                                "orderid": "@{triggerBody()?['orderid']}",
+                                                "state": "New"
+                                            },
+                                            "method": "POST",
+                                            "uri": "https://prod-13.eastus2.logic.azure.com:443/workflows/92665719ba054db0a21177796cb9eeef/triggers/manual/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=tUbSM--XDPiF4BDzw5BGeGcLfQPsNcep8U4mawPcoKo"
+                                        }
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Persist_new_order": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "expression": "@equals(variables('OrderLastStatus'), 'Finished')",
+                            "limit": {
+                                "count": 60,
+                                "timeout": "PT1H"
+                            },
+                            "type": "Until"
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuretables": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', parameters('connections_azuretables_name'))]",
+                                "connectionName": "azuretables",
+                                "id": "[variables('connections_azuretables_api')]"
+                            }
+                        }
+                    }
+                }
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/connections', parameters('connections_azuretables_name'))]"
+            ]
+        },
+        {
+            "comments": "Generalized from resource: '/subscriptions/5dd549af-d55f-4c2c-ba14-8bd7699a59b3/resourceGroups/stateful/providers/Microsoft.Logic/workflows/Stateful_01_Subscribe'.",
+            "type": "Microsoft.Logic/workflows",
+            "name": "[parameters('workflows_Stateful_01_Subscribe_name')]",
+            "apiVersion": "2017-07-01",
+            "location": "[resourceGroup().location]",
+            "tags": {},
+            "scale": null,
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "manual": {
+                            "type": "Request",
+                            "kind": "Http",
+                            "inputs": {
+                                "method": "POST",
+                                "schema": {
+                                    "properties": {
+                                        "callbackurl": {
+                                            "type": "string"
+                                        },
+                                        "orderid": {
+                                            "type": "string"
+                                        },
+                                        "state": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Insert_or_Replace_Entity": {
+                            "runAfter": {},
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "body": {
+                                    "callbackurl": "@{triggerBody()?['callbackurl']}",
+                                    "orderid": "@{triggerBody()?['orderid']}",
+                                    "state": "@{triggerBody()?['state']}"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuretables']['connectionId']"
+                                    }
+                                },
+                                "method": "put",
+                                "path": "/Tables/@{encodeURIComponent('subscriptions')}/entities(PartitionKey='@{encodeURIComponent('subs')}',RowKey='@{encodeURIComponent(triggerBody()?['orderid'])}')"
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuretables": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', parameters('connections_azuretables_name'))]",
+                                "connectionName": "azuretables",
+                                "id": "[variables('connections_azuretables_api')]"
+                            }
+                        }
+                    }
+                }
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/connections', parameters('connections_azuretables_name'))]"
+            ]
+        },
+        {
+            "comments": "Generalized from resource: '/subscriptions/5dd549af-d55f-4c2c-ba14-8bd7699a59b3/resourceGroups/stateful/providers/Microsoft.Logic/workflows/Stateful_01_Unsubscribe'.",
+            "type": "Microsoft.Logic/workflows",
+            "name": "[parameters('workflows_Stateful_01_Unsubscribe_name')]",
+            "apiVersion": "2017-07-01",
+            "location": "[resourceGroup().location]",
+            "tags": {},
+            "scale": null,
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "manual": {
+                            "type": "Request",
+                            "kind": "Http",
+                            "inputs": {
+                                "schema": {
+                                    "properties": {
+                                        "orderid": {
+                                            "type": "string"
+                                        },
+                                        "state": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Delete_subscription": {
+                            "runAfter": {},
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuretables']['connectionId']"
+                                    }
+                                },
+                                "method": "delete",
+                                "path": "/Tables/@{encodeURIComponent('subscriptions')}/entities/etag(PartitionKey='@{encodeURIComponent('subs')}',RowKey='@{encodeURIComponent(triggerBody()?['orderid'])}')"
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuretables": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', parameters('connections_azuretables_name'))]",
+                                "connectionName": "azuretables",
+                                "id": "[variables('connections_azuretables_api')]"
+                            }
+                        }
+                    }
+                }
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/connections', parameters('connections_azuretables_name'))]"
+            ]
+        },
+        {
+            "comments": "Generalized from resource: '/subscriptions/5dd549af-d55f-4c2c-ba14-8bd7699a59b3/resourceGroups/stateful/providers/Microsoft.Logic/workflows/Stateful_01_UpdateStatus'.",
+            "type": "Microsoft.Logic/workflows",
+            "name": "[parameters('workflows_Stateful_01_UpdateStatus_name')]",
+            "apiVersion": "2017-07-01",
+            "location": "[resourceGroup().location]",
+            "tags": {},
+            "scale": null,
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "manual": {
+                            "type": "Request",
+                            "kind": "Http",
+                            "inputs": {
+                                "method": "POST",
+                                "schema": {
+                                    "properties": {
+                                        "newState": {
+                                            "type": "string"
+                                        },
+                                        "orderid": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Call_long_running_Logic_App_instance": {
+                            "runAfter": {
+                                "Initialize_variable": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Http",
+                            "inputs": {
+                                "body": {
+                                    "newState": "@{triggerBody()?['newState']}",
+                                    "orderid": "@{triggerBody()?['orderid']}"
+                                },
+                                "method": "POST",
+                                "uri": "@variables('CallbackUrl')"
+                            }
+                        },
+                        "Delete_subscription": {
+                            "runAfter": {
+                                "Call_long_running_Logic_App_instance": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuretables']['connectionId']"
+                                    }
+                                },
+                                "method": "delete",
+                                "path": "/Tables/@{encodeURIComponent('subscriptions')}/entities/etag(PartitionKey='@{encodeURIComponent('subs')}',RowKey='@{encodeURIComponent(triggerBody()?['orderid'])}')"
+                            }
+                        },
+                        "Get_entity": {
+                            "runAfter": {},
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuretables']['connectionId']"
+                                    }
+                                },
+                                "method": "get",
+                                "path": "/Tables/@{encodeURIComponent('subscriptions')}/entities(PartitionKey='@{encodeURIComponent('subs')}',RowKey='@{encodeURIComponent(triggerBody()?['orderid'])}')"
+                            }
+                        },
+                        "Initialize_variable": {
+                            "runAfter": {
+                                "Get_entity": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "CallbackUrl",
+                                        "type": "String",
+                                        "value": "@{string(body('Get_entity')?['callbackurl'])}"
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuretables": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', parameters('connections_azuretables_name'))]",
+                                "connectionName": "azuretables",
+                                "id": "[variables('connections_azuretables_api')]"
+                            }
+                        }
+                    }
+                }
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/connections', parameters('connections_azuretables_name'))]"
+            ]
+        },
+        {
+            "comments": "Generalized from resource: '/subscriptions/5dd549af-d55f-4c2c-ba14-8bd7699a59b3/resourceGroups/stateful/providers/Microsoft.Logic/workflows/Stateful_02'.",
+            "type": "Microsoft.Logic/workflows",
+            "name": "[parameters('workflows_Stateful_02_name')]",
+            "apiVersion": "2017-07-01",
+            "location": "[resourceGroup().location]",
+            "tags": {},
+            "scale": null,
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "manual": {
+                            "type": "Request",
+                            "kind": "Http",
+                            "inputs": {
+                                "method": "POST",
+                                "schema": {
+                                    "properties": {
+                                        "order": {
+                                            "properties": {
+                                                "customer": {
+                                                    "type": "string"
+                                                },
+                                                "datetime": {
+                                                    "type": "string"
+                                                },
+                                                "id": {
+                                                    "type": "string"
+                                                },
+                                                "items": {
+                                                    "items": {
+                                                        "properties": {
+                                                            "description": {
+                                                                "type": "string"
+                                                            },
+                                                            "qty": {
+                                                                "type": "integer"
+                                                            },
+                                                            "sku": {
+                                                                "type": "string"
+                                                            },
+                                                            "unitprice": {
+                                                                "type": "number"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "sku",
+                                                            "description",
+                                                            "qty",
+                                                            "unitprice"
+                                                        ],
+                                                        "type": "object"
+                                                    },
+                                                    "type": "array"
+                                                },
+                                                "total": {
+                                                    "type": "number"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "orderid": {
+                                            "type": "string"
+                                        },
+                                        "orderstate": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Initialize_order_status": {
+                            "runAfter": {},
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "OrderLastStatus",
+                                        "type": "String",
+                                        "value": "@triggerBody()?['orderstate']"
+                                    }
+                                ]
+                            }
+                        },
+                        "Switch": {
+                            "runAfter": {
+                                "Initialize_order_status": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "cases": {
+                                "Finished": {
+                                    "case": "Finished",
+                                    "actions": {
+                                        "Update_order_status_to_Finished": {
+                                            "runAfter": {},
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "body": {
+                                                    "OrderState": "Finished"
+                                                },
+                                                "headers": {
+                                                    "If-Match": "*"
+                                                },
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['azuretables']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "patch",
+                                                "path": "/Tables/@{encodeURIComponent('state')}/entities/etag(PartitionKey='@{encodeURIComponent('orders')}',RowKey='@{encodeURIComponent(triggerBody()?['orderid'])}')"
+                                            }
+                                        }
+                                    }
+                                },
+                                "New": {
+                                    "case": "New",
+                                    "actions": {
+                                        "Persist_new_order": {
+                                            "runAfter": {},
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "body": {
+                                                    "Order": "@string(triggerBody()?['order'])",
+                                                    "OrderState": "New",
+                                                    "PartitionKey": "orders",
+                                                    "RowKey": "@{triggerBody()?['orderid']}"
+                                                },
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['azuretables']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "path": "/Tables/@{encodeURIComponent('state')}/entities"
+                                            }
+                                        }
+                                    }
+                                },
+                                "Shipped": {
+                                    "case": "Shipped",
+                                    "actions": {
+                                        "Update_order_status_to_Shipped": {
+                                            "runAfter": {},
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "body": {
+                                                    "OrderState": "Shipped"
+                                                },
+                                                "headers": {
+                                                    "If-Match": "*"
+                                                },
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['azuretables']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "patch",
+                                                "path": "/Tables/@{encodeURIComponent('state')}/entities/etag(PartitionKey='@{encodeURIComponent('orders')}',RowKey='@{encodeURIComponent(triggerBody()?['orderid'])}')"
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "default": {
+                                "actions": {}
+                            },
+                            "expression": "@variables('OrderLastStatus')",
+                            "type": "Switch"
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuretables": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', parameters('connections_azuretables_name'))]",
+                                "connectionName": "azuretables",
+                                "id": "[variables('connections_azuretables_api')]"
+                            }
+                        }
+                    }
+                }
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/connections', parameters('connections_azuretables_name'))]"
+            ]
+        },
+        {
+            "comments": "Generalized from resource: '/subscriptions/5dd549af-d55f-4c2c-ba14-8bd7699a59b3/resourceGroups/stateful/providers/Microsoft.Web/connections/azuretables'.",
+            "type": "Microsoft.Web/connections",
+            "name": "[parameters('connections_azuretables_name')]",
+            "apiVersion": "2016-06-01",
+            "location": "[resourceGroup().location]",
+            "scale": null,
+            "properties": {
+                "displayName": "Persistent State Storage",
+                "parameterValues": {
+                    "accountName": "[parameters('storage_account_name')]",
+                    "accessKey": "[parameters('storage_access_key')]"
+                },                
+                "customParameterValues": {},
+                "api": {
+                    "id": "[variables('connections_azuretables_api')]"
+                }
+            },
+            "dependsOn": []
+        }
+    ]
+}

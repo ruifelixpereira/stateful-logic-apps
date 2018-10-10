@@ -1,0 +1,30 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workflows_Stateful_01_name": {
+            "value": "Stateful_01"
+        },
+        "workflows_Stateful_02_name": {
+            "value": "Stateful_02"
+        },
+        "connections_azuretables_name": {
+            "value": "azuretables"
+        },
+        "workflows_Stateful_01_Subscribe_name": {
+            "value": "Stateful_01_Subscribe"
+        },
+        "workflows_Stateful_01_Unsubscribe_name": {
+            "value": "Stateful_01_Unsubscribe"
+        },
+        "workflows_Stateful_01_UpdateStatus_name": {
+            "value": "Stateful_01_UpdateStatus"
+        },
+        "storage_account_name": {
+            "value": "aaaaaaaaa"
+        },        
+        "storage_access_key": {
+            "value": "kkkkkkkk"
+        }
+    }
+}
