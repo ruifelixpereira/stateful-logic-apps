@@ -764,9 +764,11 @@
             "properties": {
                 "displayName": "Persistent State Storage",
                 "parameterValues": {
-                    "accountName": "[parameters('storage_account_name')]",
                     "accessKey": "[parameters('storage_access_key')]"
-                },                
+                },
+                "nonSecretParameterValues": {
+                    "storageaccount": "[parameters('storage_account_name')]"
+                },                                
                 "customParameterValues": {},
                 "api": {
                     "id": "[variables('connections_azuretables_api')]"
