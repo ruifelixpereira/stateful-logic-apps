@@ -64,7 +64,7 @@ Now that we have our storage account in place let's create the 2 tables we need 
 - Table `state` to persist our Logic Apps instances state;
 - Table `subscriptions` to support the Logic Apps *HTTP WebHook* actions that follow a publish-subscribe paradigm.
 
-Let's follow thses steps:
+Let's follow these steps:
 - Navigate to your newly created storage account.
 
     ![103-rg](./media/s103-storageaccount.png)
@@ -165,17 +165,17 @@ Now that we've made the changes to the parameters, let's deploy our ARM template
 ![s208](./media/s208-deploy.png)
 
 During the deployment you will be asked about some settings, most of them collected previously:
-- Subscritpion Id - just use your own subscription Id;
-- Resource Group: use the onw you have created previously.
+- Subscription Id - just use your own subscription Id;
+- Resource Group: use the own you have created previously.
 - Location - probably you are using `North Europe` which translates to `northeurope`, otherwise use your own;
 
 ![s209](./media/s209-deploy.png)
 
-The deployment might take 1 or 2 minutes and in the end you will get a success message.
+The deployment might take less than 1 minute and in the end you will get a success message.
 
 ![s210](./media/s210-deploy.png)
 
-Now you can return to the Azure Protal, naviugate to your resource group and check the created resources:
+Now you can return to the Azure Portal, navigate to your resource group and check the created resources:
 
 ![s211](./media/s211-deploy.png)
 
@@ -183,22 +183,89 @@ Now you can return to the Azure Protal, naviugate to your resource group and che
 ## Scenario 01. Logic App using Webhook
 
 This scenario is using a Logic Apps that sleeps while waiting for some event that will make it proceed to another stage/state. This is implemented with *Webhook* actions.
-Inside the Logic App we can access all the state, variables, inputs and outputs since the begining of the execution.
+Inside the Logic App we can access all the state, variables, inputs and outputs since the beginning of the execution.
 
-Just check the flow by editing Logic App ``
+Just check the flow by editing Logic App `Stateful_01`.
 
-Since this Logic App uses a Webhook, we need 2 external APIs that control the publich-subscribe pattern. In this case we have implemented these 2 APIs also using Logic Apps but we could have done in any other. The only requirement is that we need to expose 2 REST APIs, one for subscribe and another one for unsubscribe.
+**Overview**
+
+![s216](./media/s216-s01api.png)
+
+**Detailed Logic App flow**
+
+![s217](./media/s217-s01api.png)
+
+
+Since this Logic App uses a Webhook, we need 3 external APIs that control the publish-subscribe pattern. In this case we have implemented these 3 APIs also using Logic Apps but we could have done it in any other way. The only requirement is that we need to expose 3 REST APIs:
+- **Subscribe**, implemented by Logic App `Stateful_01_Subscribe`;
+
+    ![s212](./media/s212-sub.png)
+
+- **Unsubscribe**, implemented by Logic App `Stateful_01_Unsubscribe`;
+
+    ![s213](./media/s213-unsub.png)
+
+- **Publish**, implemented by Logic App `Stateful_01_UpdateStatus`.
+
+    ![s214](./media/s214-api.png)
+
+    ![s215](./media/s215-api-complete.png)
+
+These APIs use Azure Table storage to store the subscriptions metadata. A different persistent store could have been used.
 
 ### Setup external APIs
 
+Each of these 3 external APIs are implemented with Logic Apps with and HTTP trigger.
+- Go to each of them and collect the corresponding URL.
+- Configured the collected URLs in the Webhook action of the `Stateful_01` Logic App:
 
+    ![s218](./media/s218-s01api-complete.png)
 
 ## Scenario 02. Logic App using Webhook
 
 This scenario is using a pure stateless Logic App that persists state in an external persistent store, in this case an Azure Storage Table.
 
-Just check the flow by editing Logic App ``
+Just check the flow by editing Logic App `Stateful_02`
 
+![s219](./media/s219-s02api.png)
+
+![s220](./media/s220-s02api-complete.png)
 
 ## Testing both scenarios
+
+For testing both scenarios we are going to use pure API clients that will make REST calls to the URLs of both Logic Apps (Scenarios 01 and 02). You can implement these client with any approach you prefer (e.g., Postman) but we provide you a set of small javascript programs that make these REST calls. You can find these inside the `test-client` folder. 
+
+### Setup
+All the javascript client programs share a common configuration file. Inside the `test-client` folder you have a sample settings file `sample.env`. Just rename this file to `.env` and customize it with:
+- Go to each of the Logic Apps described earlier, collect the corresponding HTTP trigger URLs and populate the configurations on file `.env`.
+- Also, customize this `.env` settings with your storage account property values.
+
+```
+storage_account_name=xxxxx
+storage_account_key=yyyyy
+subscribe_url=aaaaaaaaaa
+unsubscribe_url=bbbbbbbbbb
+changestate_url=cccccccccccccccc
+createorder_url=ddddddddddddddddddd
+scenario_02_url=eeeeeeeeeeeeeeee
+```
+
+### Test Scenario 01
+
+In order to test Scenario 01 you can use the following sample javascript clients, implemented in javascript by this order:
+- `s01-step1-create-new-order.js`: starts a new Scenario_01 Logic App instance (you can check it on the Azure Portal) that keeps running until receiving an order status change event;
+- `s01-step2-ship-order.js`: changes the order status to "Shipped" which advances the Logic App to a new stage and keeps waiting for a new event;
+- `s01-step3-finish-order.js`: changes the order status to "Finished" which advances the Logic App to a new stage and terminates it;
+- `tbl-list-table-contents.js`: at any time you can check what is registered in the persistence storage;
+- `tbl-del-orders.js`: in the end you can delete the Azure Table Storage.
+
+
+### Test Scenario 02
+
+In order to test Scenario 02 you can use the following sample javascript clients, implemented in javascript by this order:
+- `s02-step1-create-new-order.js`: starts a new Scenario_01 Logic App instance (you can check it on the Azure Portal) that keeps running until receiving an order status change event;
+- `s02-step2-ship-order.js`: changes the order status to "Shipped" which advances the Logic App to a new stage and keeps waiting for a new event;
+- `s02-step3-finish-order.js`: changes the order status to "Finished" which advances the Logic App to a new stage and terminates it;
+- `tbl-list-table-contents.js`: at any time you can check what is registered in the persistence storage;
+- `tbl-del-orders.js`: in the end you can delete the Azure Table Storage.
 
